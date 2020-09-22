@@ -10,7 +10,7 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
+import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * @author chunhui.wu
  */
+@Slf4j
 public class CatServer {
 
     private int port;
@@ -43,24 +44,21 @@ public class CatServer {
                 .channel(NioServerSocketChannel.class)
                 .childHandler(new HttpServerInitializer());
 
-        ChannelFuture f = bindWithRetry(bootstrap, port).sync();
+        ChannelFuture f = bindWithRetrying(bootstrap, port).sync();
         f.channel().closeFuture().sync();
     }
 
-    private ChannelFuture bindWithRetry(final ServerBootstrap bootstrap, final int port) {
+    private ChannelFuture bindWithRetrying(final ServerBootstrap bootstrap, final int port) {
         final AtomicInteger limit = new AtomicInteger(0);
-        return bootstrap.bind(new InetSocketAddress(port)).addListener(new GenericFutureListener<Future<? super Void>>() {
-            @Override
-            public void operationComplete(Future<? super Void> future) throws Exception {
-                if (future.isSuccess()) {
-                    System.out.println("server bind success, start up on port:" + port);
-                } else {
-                    if (limit.get() < maxRetryLimit) {
-                        System.out.println("server bind failed, try again for next port...");
-                        bindWithRetry(bootstrap, port + 1);
-                    }
-                    limit.getAndIncrement();
+        return bootstrap.bind(new InetSocketAddress(port)).addListener((Future<? super Void> future) -> {
+            if (future.isSuccess()) {
+                log.info("server bind success, start up on port:{}", port);
+            } else {
+                if (limit.get() < maxRetryLimit) {
+                    log.info("server bind failed, try again for next port...");
+                    bindWithRetrying(bootstrap, port + 1);
                 }
+                limit.getAndIncrement();
             }
         });
     }
