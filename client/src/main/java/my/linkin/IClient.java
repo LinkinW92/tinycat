@@ -1,5 +1,7 @@
 package my.linkin;
 
+import my.linkin.entity.Request;
+
 import java.net.SocketAddress;
 
 /**

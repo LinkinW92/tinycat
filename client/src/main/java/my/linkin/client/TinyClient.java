@@ -9,7 +9,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
 import my.linkin.AutoClearChannelHander;
 import my.linkin.IClient;
-import my.linkin.Request;
+import my.linkin.entity.Request;
 import my.linkin.channel.ChannelPool;
 import my.linkin.ex.TiException;
 
@@ -63,16 +63,16 @@ public class TinyClient implements IClient {
     @Override
     public boolean send(Request req, SocketAddress addr) {
         ChannelFuture cf = this.pool.open(addr, DEFAULT_TIMEOUT);
-        return doPrivateSend(cf, req, MAX_RETRY_LIMIT);
+        return this.doPrivateSend(cf, req, MAX_RETRY_LIMIT);
     }
 
     @Override
     public boolean send(Request req, SocketAddress addr, Long millis) {
         ChannelFuture cf = this.pool.open(addr, millis);
-        return doPrivateSend(cf, req, MAX_RETRY_LIMIT);
+        return this.doPrivateSend(cf, req, MAX_RETRY_LIMIT);
     }
 
-    private boolean doPrivateSend(ChannelFuture cf, Request<?> req, Integer retryTimes) {
+    private boolean doPrivateSend(final ChannelFuture cf, Request<?> req, Integer retryTimes) {
         if (retryTimes < 0) {
             throw new TiException("Fail to send req after max retry times");
         }
