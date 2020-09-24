@@ -1,5 +1,6 @@
 package my.linkin.channel;
 
+import io.netty.bootstrap.AbstractBootstrap;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
@@ -25,18 +26,24 @@ public class ChannelPool {
     private ConcurrentMap<String, ChannelFuture> channelPool = new ConcurrentHashMap<>(16);
 
     /**
+     * the name of the poo;
+     */
+    private String poolName;
+
+    /**
      * the netty bootstrap
      */
-    private Bootstrap bootstrap;
+    private AbstractBootstrap bootstrap;
 
     /**
      * the maximum number of channel that the client can create
      */
     private Semaphore maxConnection;
 
-    public ChannelPool(Bootstrap bootstrap, Integer maxConnection) {
+    public ChannelPool(AbstractBootstrap bootstrap, Integer maxConnection, String poolName) {
         this.bootstrap = bootstrap;
         this.maxConnection = new Semaphore(maxConnection);
+        this.poolName = poolName;
     }
 
 

@@ -10,9 +10,9 @@ import java.util.Map;
  * a hearbeat body
  */
 @Data
-public class HeartBeat extends Entity {
+public class Heartbeat extends Entity {
     /**
-     * the current millis that the HeartBeat being created, in a single physical machine, we use
+     * the current millis that the Heartbeat being created, in a single physical machine, we use
      * this beatTime to calculate the time for handshake
      */
     private long beatTime;
@@ -26,10 +26,10 @@ public class HeartBeat extends Entity {
      */
     private Map<String, Object> ext;
 
-    public HeartBeat() {
+    public Heartbeat() {
     }
 
-    public HeartBeat(String message) {
+    public Heartbeat(String message) {
         this.beatTime = System.currentTimeMillis();
         this.message = message;
     }

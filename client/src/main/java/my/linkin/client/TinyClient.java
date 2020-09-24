@@ -6,17 +6,28 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import my.linkin.AutoChannelRemovalHandler;
+import my.linkin.ClientConfig;
 import my.linkin.IClient;
 import my.linkin.channel.ChannelPool;
 import my.linkin.codec.TiDecoder;
 import my.linkin.codec.TiEncoder;
+import my.linkin.entity.Heartbeat;
 import my.linkin.entity.TiCommand;
 import my.linkin.ex.TiException;
+import my.linkin.util.Helper;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author chunhui.wu
@@ -32,9 +43,22 @@ public class TinyClient implements IClient {
     private static final Long DEFAULT_TIMEOUT = 1000L;
 
     /**
-     * if we fail to send a req, then we retry until the retry times exceed the {@link TinyClient#MAX_RETRY_LIMIT}
+     * the scheduled pool for heartbeat task
      */
-    private static final int MAX_RETRY_LIMIT = 5;
+    private ExecutorService heartbeatExecutor;
+
+    /**
+     * timer for heartbeat
+     */
+    private Timer timer = new Timer("Heartbeat", true);
+    /**
+     * if canceled is true, we terminate the timer and won't send heartbeat anymore
+     */
+    private AtomicBoolean canceled = new AtomicBoolean(false);
+    /**
+     * the client config
+     */
+    private static final ClientConfig config = new ClientConfig();
 
 
     /**
@@ -45,7 +69,7 @@ public class TinyClient implements IClient {
     public TinyClient(Integer maxConnection) {
         bootstrap = new Bootstrap();
         //TODO early expose the reference of bootstrap, does it have any problems?
-        pool = new ChannelPool(bootstrap, maxConnection);
+        pool = new ChannelPool(bootstrap, maxConnection, "TinyClient");
 
         EventLoopGroup worker = new NioEventLoopGroup();
         bootstrap.group(worker)
@@ -62,25 +86,64 @@ public class TinyClient implements IClient {
                         pipeline.addLast(new TiEncoder(pool));
                     }
                 });
+        heartbeatExecutor = new ScheduledThreadPoolExecutor(1);
+        start();
     }
 
     /**
      * start some helper job， such as heartbeat thread
      */
     private void start() {
+        // the heartbeat task runs two times per second
+        this.timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                if (!canceled.get()) {
+                    TinyClient.this.beatIt(new AtomicInteger(config.getMaxRetryTimes()));
+                } else {
+                    // terminate
+                    timer.cancel();
+                    // remove the canceled tasks
+                    timer.purge();
+                }
+            }
+        }, 3 * 1000, 30 * 1000);
+    }
 
+    private void beatIt(final AtomicInteger retryTimes) {
+        InetSocketAddress serverAddr = new InetSocketAddress("127.0.01", 1010);
+        // if we fail to handshake with the server, then we remove the channel which bind with the server addr
+        if (retryTimes.get() == 0) {
+            log.warn("Failed to send heartbeat to the server:{}, so we have to remove the channel from the pool", Helper.identifier(serverAddr));
+            this.pool.close(serverAddr);
+            log.info("Shutdown the heartbeat timer...");
+            this.canceled.compareAndSet(false, true);
+            return;
+        }
+        ChannelFuture cf = pool.open(new InetSocketAddress("127.0.0.1", 1010), 1000L);
+        TiCommand cmd = TiCommand.heartbeat();
+        Heartbeat hb = new Heartbeat("ping");
+        cmd.setBody(hb.encode());
+        cf.channel().writeAndFlush(cmd).addListener((Future<? super Void> future) -> {
+            // if the heartbeat is failed, sleep for a while and then try again
+            if (!future.isSuccess()) {
+                Thread.sleep((config.getMaxRetryTimes() - retryTimes.get()) * 1000);
+                retryTimes.getAndSet(retryTimes.decrementAndGet());
+                heartbeatExecutor.execute(() -> beatIt(retryTimes));
+            }
+        });
     }
 
     @Override
     public boolean send(TiCommand req, SocketAddress addr) {
         ChannelFuture cf = this.pool.open(addr, DEFAULT_TIMEOUT);
-        return this.doPrivateSend(cf, req, MAX_RETRY_LIMIT);
+        return this.doPrivateSend(cf, req, config.getMaxRetryTimes());
     }
 
     @Override
     public boolean send(TiCommand req, SocketAddress addr, Long millis) {
         ChannelFuture cf = this.pool.open(addr, millis);
-        return this.doPrivateSend(cf, req, MAX_RETRY_LIMIT);
+        return this.doPrivateSend(cf, req, config.getMaxRetryTimes());
     }
 
     private boolean doPrivateSend(final ChannelFuture cf, TiCommand req, Integer retryTimes) {
@@ -92,7 +155,7 @@ public class TinyClient implements IClient {
             if (!future.isSuccess()) {
                 doPrivateSend(cf, req, retry);
             } else {
-                log.info("Send req successfully with retry times:{}", MAX_RETRY_LIMIT - retry + 1);
+                log.info("Send req successfully with retry times:{}", config.getMaxRetryTimes() - retry + 1);
             }
         });
         return true;
