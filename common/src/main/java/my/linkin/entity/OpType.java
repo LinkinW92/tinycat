@@ -1,6 +1,6 @@
 package my.linkin.entity;
 
-import io.swagger.models.auth.In;
+import my.linkin.ex.TiException;
 
 /**
  * @author chunhui.wu
@@ -12,9 +12,13 @@ public enum OpType {
      */
     HEART_BEAT(0b00000001),
     /**
-     * common type request, just send a msg
+     * request type, just send a msg
      */
-    COMMON(0b00000010);
+    REQUEST(0b00000010),
+    /**
+     * response type, just response to a request
+     */
+    RESPONSE(0b00000011);
 
     private Integer identifier;
 
@@ -24,5 +28,14 @@ public enum OpType {
 
     public Integer getIdentifier() {
         return identifier;
+    }
+
+    public static OpType op(byte b) {
+        for (OpType o : OpType.values()) {
+            if ((o.identifier ^ b) == 0) {
+                return o;
+            }
+        }
+        throw new TiException("Invalid identifier for opType");
     }
 }

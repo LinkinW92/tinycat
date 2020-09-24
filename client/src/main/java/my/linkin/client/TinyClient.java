@@ -7,10 +7,12 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
-import my.linkin.AutoClearChannelHander;
+import my.linkin.AutoChannelRemovalHandler;
 import my.linkin.IClient;
 import my.linkin.channel.ChannelPool;
-import my.linkin.entity.Request;
+import my.linkin.codec.TiDecoder;
+import my.linkin.codec.TiEncoder;
+import my.linkin.entity.TiCommand;
 import my.linkin.ex.TiException;
 
 import java.net.SocketAddress;
@@ -27,7 +29,7 @@ public class TinyClient implements IClient {
      */
     private Bootstrap bootstrap;
 
-    private static final Long DEFAULT_TIMEOUT = 1000l;
+    private static final Long DEFAULT_TIMEOUT = 1000L;
 
     /**
      * if we fail to send a req, then we retry until the retry times exceed the {@link TinyClient#MAX_RETRY_LIMIT}
@@ -55,24 +57,26 @@ public class TinyClient implements IClient {
                         ChannelPipeline pipeline = ch.pipeline();
                         pipeline.addLast(new IdleStateHandler(5000, 5000, 0, TimeUnit.MILLISECONDS));
                         // auto remove the channel from the channel pool if it becomes idle
-                        pipeline.addLast(new AutoClearChannelHander(pool));
+                        pipeline.addLast(new AutoChannelRemovalHandler(pool));
+                        pipeline.addLast(new TiDecoder(pool));
+                        pipeline.addLast(new TiEncoder(pool));
                     }
                 });
     }
 
     @Override
-    public boolean send(Request req, SocketAddress addr) {
+    public boolean send(TiCommand req, SocketAddress addr) {
         ChannelFuture cf = this.pool.open(addr, DEFAULT_TIMEOUT);
         return this.doPrivateSend(cf, req, MAX_RETRY_LIMIT);
     }
 
     @Override
-    public boolean send(Request req, SocketAddress addr, Long millis) {
+    public boolean send(TiCommand req, SocketAddress addr, Long millis) {
         ChannelFuture cf = this.pool.open(addr, millis);
         return this.doPrivateSend(cf, req, MAX_RETRY_LIMIT);
     }
 
-    private boolean doPrivateSend(final ChannelFuture cf, Request req, Integer retryTimes) {
+    private boolean doPrivateSend(final ChannelFuture cf, TiCommand req, Integer retryTimes) {
         if (retryTimes < 0) {
             throw new TiException("Fail to send req after max retry times");
         }

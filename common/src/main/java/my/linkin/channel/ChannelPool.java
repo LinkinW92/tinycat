@@ -4,8 +4,8 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import my.linkin.TinyAddress;
 import my.linkin.ex.TiException;
+import my.linkin.util.Helper;
 
 import java.net.SocketAddress;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,8 +20,9 @@ import java.util.concurrent.TimeUnit;
 public class ChannelPool {
     /**
      * the channel cache, for reusing purpose
+     * key for ip:port address
      */
-    private ConcurrentMap<String/*ip*/, ChannelFuture> channelPool = new ConcurrentHashMap<>(16);
+    private ConcurrentMap<String, ChannelFuture> channelPool = new ConcurrentHashMap<>(16);
 
     /**
      * the netty bootstrap
@@ -43,10 +44,8 @@ public class ChannelPool {
      * open the channel that the addr bind, if not cache, then create a new one
      */
     public ChannelFuture open(SocketAddress addr, Long millis) {
-        if (!(addr instanceof TinyAddress)) {
-            throw new TiException("Invalid addr!!!");
-        }
-        ChannelFuture cached = this.channelPool.get(((TinyAddress) addr).identity());
+        String identifier = Helper.identifier(addr);
+        ChannelFuture cached = this.channelPool.get(identifier);
         if (cached != null) {
             return cached;
         }
@@ -61,7 +60,7 @@ public class ChannelPool {
             }
         });
         // cache the channel for future use
-        this.channelPool.putIfAbsent(((TinyAddress) addr).identity(), cf);
+        this.channelPool.putIfAbsent(identifier, cf);
         return cf;
     }
 
@@ -69,7 +68,7 @@ public class ChannelPool {
      * close a channel, and release the permit
      */
     public boolean close(SocketAddress addr) {
-        String identifier = ((TinyAddress) addr).identity();
+        String identifier = Helper.identifier(addr);
         ChannelFuture removed = this.channelPool.remove(identifier);
         if (removed != null) {
             //TODO check the impl

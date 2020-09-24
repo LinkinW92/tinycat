@@ -13,12 +13,12 @@ import my.linkin.channel.ChannelPool;
  * handler to remove the idle channel from the channel pool
  */
 @Slf4j
-public class AutoClearChannelHander extends ChannelInboundHandlerAdapter {
+public class AutoChannelRemovalHandler extends ChannelInboundHandlerAdapter {
 
 
     private ChannelPool pool;
 
-    public AutoClearChannelHander(ChannelPool pool) {
+    public AutoChannelRemovalHandler(ChannelPool pool) {
         this.pool = pool;
     }
 

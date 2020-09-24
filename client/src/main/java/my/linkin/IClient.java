@@ -1,6 +1,6 @@
 package my.linkin;
 
-import my.linkin.entity.Request;
+import my.linkin.entity.TiCommand;
 
 import java.net.SocketAddress;
 
@@ -17,7 +17,7 @@ public interface IClient {
      * @param addr the destination for this req
      * @return true if successful
      */
-    boolean send(Request req, SocketAddress addr);
+    boolean send(TiCommand req, SocketAddress addr);
 
     /**
      * 发送消息超时版本
@@ -27,5 +27,5 @@ public interface IClient {
      * @param millis timeout
      * @return true if successful
      */
-    boolean send(Request req, SocketAddress addr, Long millis);
+    boolean send(TiCommand req, SocketAddress addr, Long millis);
 }
