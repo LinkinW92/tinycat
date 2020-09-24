@@ -64,6 +64,13 @@ public class TinyClient implements IClient {
                 });
     }
 
+    /**
+     * start some helper job， such as heartbeat thread
+     */
+    private void start() {
+
+    }
+
     @Override
     public boolean send(TiCommand req, SocketAddress addr) {
         ChannelFuture cf = this.pool.open(addr, DEFAULT_TIMEOUT);
