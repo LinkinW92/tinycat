@@ -81,8 +81,7 @@ public class TiClusterNode {
     public TiClusterNode() {
     }
 
-    public TiClusterNode(String nodeId, Role role, InetSocketAddress host) {
-        this.nodeId = nodeId;
+    public TiClusterNode(Role role, InetSocketAddress host) {
         this.role = role;
         this.host = host;
         this.lastBeatTime = System.currentTimeMillis();
@@ -90,7 +89,7 @@ public class TiClusterNode {
 
 
     /**
-     * map the current node to the cluster map. If the node has in the map, just update.
+     * map the current node to the cluster map. If the node has been in the map, just update.
      */
     public void map(TiClusterNode peer) {
         final String nodeId = peer.getNodeId();

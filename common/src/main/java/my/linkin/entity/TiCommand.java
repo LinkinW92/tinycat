@@ -16,6 +16,11 @@ public class TiCommand {
     private Header header;
     private byte[] body;
 
+    public TiCommand of(Entity entity) {
+        this.setBody(entity.encode());
+        return this;
+    }
+
 
     /**
      * create a heartbeat request
@@ -41,6 +46,15 @@ public class TiCommand {
     public static TiCommand response() {
         TiCommand req = new TiCommand();
         req.setHeader(Header.response());
+        return req;
+    }
+
+    /**
+     * create a response
+     */
+    public static TiCommand handshake() {
+        TiCommand req = new TiCommand();
+        req.setHeader(Header.handshake());
         return req;
     }
 

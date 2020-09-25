@@ -19,6 +19,6 @@ public class TinyServerBootstrap implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         System.out.println("Running tiny cat server...");
-        new TinyServer(1010).start();
+        new TinyServer(1010, true);
     }
 }

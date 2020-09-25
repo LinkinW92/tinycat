@@ -53,6 +53,12 @@ public class Header {
         return h;
     }
 
+    public static Header handshake() {
+        Header h = new Header();
+        h.setOpType(OpType.HANDSHAKE);
+        return h;
+    }
+
     public ByteBuffer encode() {
         ByteBuffer buffer = ByteBuffer.allocate(6);
         buffer.put((byte) (opType.getIdentifier() & 0xff));

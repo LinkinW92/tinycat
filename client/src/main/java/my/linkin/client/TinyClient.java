@@ -9,7 +9,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import my.linkin.AutoChannelRemovalHandler;
-import my.linkin.ClientConfig;
+import my.linkin.Config;
 import my.linkin.IClient;
 import my.linkin.channel.ChannelPool;
 import my.linkin.codec.TiDecoder;
@@ -23,7 +23,10 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -53,10 +56,6 @@ public class TinyClient implements IClient {
      * if canceled is true, we terminate the timer and won't send heartbeat anymore
      */
     private AtomicBoolean canceled = new AtomicBoolean(false);
-    /**
-     * the client config
-     */
-    private static final ClientConfig config = new ClientConfig();
 
 
     /**
@@ -79,17 +78,17 @@ public class TinyClient implements IClient {
                         ChannelPipeline pipeline = ch.pipeline();
                         pipeline.addLast(new IdleStateHandler(5000, 5000, 0, TimeUnit.MILLISECONDS));
                         // auto remove the channel from the channel pool if it becomes idle
-//                        pipeline.addLast(new AutoChannelRemovalHandler(pool));
+                        pipeline.addLast(new AutoChannelRemovalHandler(pool));
                         pipeline.addLast(new TiDecoder(pool));
                         pipeline.addLast(new TiEncoder(pool));
                         pipeline.addLast(new ClientHandler(pool));
                     }
                 });
-        this.publicExecutor = new ThreadPoolExecutor(config.getPublicExecutorCoreSize(),
-                config.getPublicExecutorCoreSize(),
+        this.publicExecutor = new ThreadPoolExecutor(Config.publicExecutorCoreSize,
+                Config.publicExecutorCoreSize,
                 0L,
                 TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<>(config.getPublicWorkerQueueSize()),
+                new LinkedBlockingQueue<>(Config.publicWorkerQueueSize),
                 new TiThreadFactory("TinyClient"),
                 new ThreadPoolExecutor.CallerRunsPolicy());
 
@@ -106,7 +105,7 @@ public class TinyClient implements IClient {
             @Override
             public void run() {
                 if (!canceled.get()) {
-                    TinyClient.this.beatIt(new AtomicInteger(config.getMaxRetryTimes()));
+                    TinyClient.this.beatIt(new AtomicInteger(Config.maxRetryTimes));
                 } else {
                     // terminate
                     timer.cancel();
@@ -134,10 +133,10 @@ public class TinyClient implements IClient {
         cf.channel().writeAndFlush(cmd).addListener((Future<? super Void> future) -> {
             // if the heartbeat is failed, sleep for a while and then try again
             if (!future.isSuccess()) {
-                Thread.sleep((config.getMaxRetryTimes() - retryTimes.get()) * 1000);
+                Thread.sleep((Config.maxRetryTimes - retryTimes.get()) * 1000);
                 retryTimes.getAndSet(retryTimes.decrementAndGet());
                 publicExecutor.execute(() -> beatIt(retryTimes));
-            }else {
+            } else {
             }
         });
     }
@@ -145,13 +144,13 @@ public class TinyClient implements IClient {
     @Override
     public boolean send(TiCommand req, SocketAddress addr) {
         ChannelFuture cf = this.pool.open(addr, DEFAULT_TIMEOUT);
-        return this.doPrivateSend(cf, req, config.getMaxRetryTimes());
+        return this.doPrivateSend(cf, req, Config.maxRetryTimes);
     }
 
     @Override
     public boolean send(TiCommand req, SocketAddress addr, Long millis) {
         ChannelFuture cf = this.pool.open(addr, millis);
-        return this.doPrivateSend(cf, req, config.getMaxRetryTimes());
+        return this.doPrivateSend(cf, req, Config.maxRetryTimes);
     }
 
     private boolean doPrivateSend(final ChannelFuture cf, TiCommand req, Integer retryTimes) {
@@ -163,7 +162,7 @@ public class TinyClient implements IClient {
             if (!future.isSuccess()) {
                 doPrivateSend(cf, req, retry);
             } else {
-                log.info("Send req successfully with retry times:{}", config.getMaxRetryTimes() - retry + 1);
+                log.info("Send req successfully with retry times:{}", Config.maxRetryTimes - retry + 1);
             }
         });
         return true;
