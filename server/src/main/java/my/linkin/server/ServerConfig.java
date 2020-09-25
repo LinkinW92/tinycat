@@ -8,4 +8,7 @@ import my.linkin.Config;
  */
 @Data
 public class ServerConfig extends Config {
+
+
+
 }
