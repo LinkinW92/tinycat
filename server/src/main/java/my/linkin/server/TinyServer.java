@@ -4,22 +4,29 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.logging.LogLevel;
-import io.netty.handler.logging.LoggingHandler;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
+import my.linkin.AutoChannelRemovalHandler;
 import my.linkin.channel.ChannelPool;
+import my.linkin.codec.TiDecoder;
+import my.linkin.codec.TiEncoder;
+import my.linkin.entity.Entity;
 import my.linkin.entity.Heartbeat;
 import my.linkin.entity.OpType;
 import my.linkin.entity.TiCommand;
 import my.linkin.ex.TiException;
+import my.linkin.thread.TiThreadFactory;
 import my.linkin.util.Helper;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -47,7 +54,7 @@ public class TinyServer {
     /**
      * public executor for some asynchronous tasks
      */
-    private ExecutorService publicExecutor = Executors.newFixedThreadPool(config.getPublicSize());
+    private ExecutorService publicExecutor;
 
     /**
      * the netty bootstrap
@@ -56,21 +63,38 @@ public class TinyServer {
 
     public TinyServer(int port) {
         this.port = port;
-        bootstrap = new ServerBootstrap();
-        pool = new ChannelPool(bootstrap, 5, "TinyServer");
+        this.bootstrap = new ServerBootstrap();
+        this.pool = new ChannelPool(bootstrap, 5, "TinyServer");
+        this.publicExecutor = new ThreadPoolExecutor(config.getPublicExecutorCoreSize(),
+                config.getPublicExecutorCoreSize(),
+                0L,
+                TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(config.getPublicWorkerQueueSize()),
+                new TiThreadFactory("TinyServer"),
+                new ThreadPoolExecutor.CallerRunsPolicy());
     }
 
     public void start() throws Exception {
         EventLoopGroup boss = new NioEventLoopGroup();
         EventLoopGroup work = new NioEventLoopGroup();
         bootstrap.group(boss, work)
-                .handler(new LoggingHandler(LogLevel.DEBUG))
+//                .handler(new LoggingHandler(LogLevel.DEBUG))
                 .attr(AttributeKey.newInstance("serverName"), "Tiny Server")
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000)
-                .option(ChannelOption.SO_KEEPALIVE, true)
                 .option(ChannelOption.SO_REUSEADDR, true)
                 .channel(NioServerSocketChannel.class)
-                .childHandler(new HttpServerInitializer());
+                .childHandler(new ChannelInitializer<NioSocketChannel>() {
+                    @Override
+                    protected void initChannel(NioSocketChannel ch) {
+                        ChannelPipeline pipeline = ch.pipeline();
+                        pipeline.addLast(new IdleStateHandler(5000, 5000, 0, TimeUnit.MILLISECONDS));
+                        // auto remove the channel from the channel pool if it becomes idle
+                        pipeline.addLast(new AutoChannelRemovalHandler(pool));
+                        pipeline.addLast(new TiDecoder(pool));
+                        pipeline.addLast(new TiEncoder(pool));
+                        pipeline.addLast(new ServerHandler(pool));
+                    }
+                });
 
         ChannelFuture f = bindWithRetrying(bootstrap, port).sync();
         f.channel().closeFuture().sync();
@@ -78,9 +102,10 @@ public class TinyServer {
 
     private ChannelFuture bindWithRetrying(final ServerBootstrap bootstrap, final int port) {
         final AtomicInteger limit = new AtomicInteger(0);
-        return bootstrap.bind(new InetSocketAddress(port)).addListener((Future<? super Void> future) -> {
+        final SocketAddress bindAddr = new InetSocketAddress("localhost", port);
+        return bootstrap.bind(bindAddr).addListener((Future<? super Void> future) -> {
             if (future.isSuccess()) {
-                log.info("server bind success, start up on port:{}", port);
+                log.info("server bind success, start up on addr, {}", Helper.identifier(bindAddr));
             } else {
                 if (limit.get() < maxRetryLimit) {
                     log.info("server bind failed, try again for next port...");
@@ -101,12 +126,11 @@ public class TinyServer {
             case HEART_BEAT:
                 Heartbeat beat = null;
                 if (tc.getHeader().getLength() > 0) {
-                    beat = (Heartbeat) Heartbeat.decode(Heartbeat.class, tc.getBody());
+                    beat = Entity.decode(Heartbeat.class, tc.getBody());
                 }
                 processHeartbeat(ctx, beat);
                 break;
             case REQUEST:
-                break;
             case RESPONSE:
                 break;
             default:
@@ -120,33 +144,30 @@ public class TinyServer {
     private void processHeartbeat(ChannelHandlerContext ctx, Heartbeat beat) {
         final SocketAddress clientAddr = ctx.channel().localAddress();
         if (beat != null) {
-            final long beatTime = beat.getBeatTime();
-            log.info("Server receive a heartbeat that generated at timestamp:{} from the client:{}", beatTime, Helper.identifier(clientAddr));
+            log.info("{}", beat.getMessage());
         } else {
             log.info("Server receive a heartbeat from the client:{}", Helper.identifier(clientAddr));
         }
         TiCommand cmd = TiCommand.heartbeat();
-        Heartbeat pong = new Heartbeat("pong");
+        Heartbeat pong = Heartbeat.pong();
         cmd.setBody(pong.encode());
-        pong(cmd, clientAddr, new AtomicInteger(config.getMaxRetryTimes()));
+        pong(ctx, cmd, clientAddr, new AtomicInteger(config.getMaxRetryTimes()));
     }
 
     /**
      * send pong to client
      */
-    private void pong(final TiCommand cmd, final SocketAddress clientAddr, final AtomicInteger retryTimes) {
+    private void pong(final ChannelHandlerContext ctx, final TiCommand cmd, final SocketAddress clientAddr, final AtomicInteger retryTimes) {
         if (retryTimes.get() == 0) {
             log.warn("Server failed to send pong to client, now we have to remove the channel the client bind");
             pool.close(clientAddr);
             return;
         }
-
-        ChannelFuture cf = pool.open(clientAddr, 5000L);
-        cf.channel().writeAndFlush(cmd).addListener((Future<? super Void> future) -> {
+        ctx.writeAndFlush(cmd).addListener((Future<? super Void> future) -> {
             if (!future.isSuccess()) {
                 Thread.sleep((config.getMaxRetryTimes() - retryTimes.get()) * 1000);
                 retryTimes.getAndSet(retryTimes.decrementAndGet());
-                publicExecutor.execute(() -> pong(cmd, clientAddr, retryTimes));
+                publicExecutor.execute(() -> pong(ctx, cmd, clientAddr, retryTimes));
             }
         });
     }
@@ -154,9 +175,19 @@ public class TinyServer {
     @ChannelHandler.Sharable
     class ServerHandler extends SimpleChannelInboundHandler<TiCommand> {
 
+        private ChannelPool pool;
+
+        public ServerHandler(ChannelPool pool) {
+            this.pool = pool;
+        }
+
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, TiCommand cmd) throws Exception {
-            processCommand(ctx, cmd);
+            try {
+                processCommand(ctx, cmd);
+            } catch (Exception e) {
+                log.warn("An error occurs when process command, ex:{}", e);
+            }
         }
     }
 }

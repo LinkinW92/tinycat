@@ -34,6 +34,20 @@ public class Heartbeat extends Entity {
         this.message = message;
     }
 
+    public static Heartbeat ping() {
+        Heartbeat beat = new Heartbeat();
+        beat.beatTime = System.currentTimeMillis();
+        beat.message = "ping";
+        return beat;
+    }
+
+    public static Heartbeat pong() {
+        Heartbeat beat = new Heartbeat();
+        beat.beatTime = System.currentTimeMillis();
+        beat.message = "pong";
+        return beat;
+    }
+
     public void extent(String k, Object v) {
         if (this.ext == null) {
             this.ext = new HashMap<>(16);

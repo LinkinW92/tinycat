@@ -1,5 +1,6 @@
 package my.linkin;
 
+import my.linkin.client.TinyClient;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -10,14 +11,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author chunhui.wu
  */
 @SpringBootApplication
-public class TinyClient implements CommandLineRunner {
+public class TinyClientBootstrap implements CommandLineRunner {
     public static void main(String[] args) {
-        SpringApplication.run(TinyClient.class, args);
+        SpringApplication.run(TinyClientBootstrap.class, args);
     }
 
     @Override
     public void run(String... args) throws Exception {
         System.out.println("Running tiny cat client...");
-        new CatClient(1010).start();
+        new TinyClient(1010);
     }
 }

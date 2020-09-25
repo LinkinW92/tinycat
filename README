@@ -1,2 +1,7 @@
-1. 实现简单的请求响应
-2. 实现last-modified功能
+TinyCat is a tiny and simple project. We will complete this project step by step.
+Step1: the ping-pong between client and server.
+Step2: the ping-pong among servers.
+Step3: try to build up a cluster mode, which named tinyCluster. A cluster consist of one or more then one client, and some servers(at least 3 servers).
+       In a tinyCluster, we implement the Raft as TinyRaft to achieve HA.
+Step4: we write some data to tinyCluster. Only the master can take the write operation, the master receive the command from the client, then broadcast the
+       command to followers, if more than half of followers write successfully, then the master reply success to the client.

@@ -18,7 +18,7 @@ public abstract class Entity {
         return json.getBytes(UTF8);
     }
 
-    public static Entity decode(Class<? extends Entity> clz, byte[] body) {
+    public static <T> T decode(Class<T> clz, byte[] body) {
         return JSON.parseObject(body, clz);
     }
 }
