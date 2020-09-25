@@ -5,6 +5,7 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
+import lombok.extern.slf4j.Slf4j;
 import my.linkin.ex.TiException;
 import my.linkin.util.Helper;
 
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit;
  * @author chunhui.wu
  * a pool for channel reuse
  */
+@Slf4j
 public class ChannelPool {
     /**
      * the channel cache, for reusing purpose
@@ -50,7 +52,7 @@ public class ChannelPool {
     /**
      * open the channel that the addr bind, if not cache, then create a new one
      */
-    public ChannelFuture open(SocketAddress addr, Long millis) {
+    public ChannelFuture open(final SocketAddress addr, Long millis) {
         String identifier = Helper.identifier(addr);
         ChannelFuture cached = this.channelPool.get(identifier);
         if (cached != null) {
@@ -58,10 +60,11 @@ public class ChannelPool {
         }
         // if we cannot get a channel from the pool , then we create a new one
         tryAcquire(addr, millis);
-        ChannelFuture cf = bootstrap.bind(addr).addListener(new GenericFutureListener<Future<? super Void>>() {
+        ChannelFuture cf = ((Bootstrap) bootstrap).connect(addr).addListener(new GenericFutureListener<Future<? super Void>>() {
             @Override
             public void operationComplete(Future<? super Void> future) throws Exception {
                 if (!future.isSuccess()) {
+                    log.warn("Failed to open a channel for address: {}", Helper.identifier(addr));
                     throw new TiException("Make sure the remote server is alive...");
                 }
             }
@@ -75,6 +78,7 @@ public class ChannelPool {
      * close a channel, and release the permit
      */
     public boolean close(SocketAddress addr) {
+        log.info("Closing the channel bind with remote address: {}", Helper.identifier(addr));
         String identifier = Helper.identifier(addr);
         ChannelFuture removed = this.channelPool.remove(identifier);
         if (removed != null) {

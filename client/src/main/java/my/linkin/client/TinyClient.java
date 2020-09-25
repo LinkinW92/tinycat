@@ -14,18 +14,16 @@ import my.linkin.IClient;
 import my.linkin.channel.ChannelPool;
 import my.linkin.codec.TiDecoder;
 import my.linkin.codec.TiEncoder;
-import my.linkin.entity.Heartbeat;
-import my.linkin.entity.TiCommand;
+import my.linkin.entity.*;
 import my.linkin.ex.TiException;
+import my.linkin.thread.TiThreadFactory;
 import my.linkin.util.Helper;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -43,9 +41,9 @@ public class TinyClient implements IClient {
     private static final Long DEFAULT_TIMEOUT = 1000L;
 
     /**
-     * the scheduled pool for heartbeat task
+     * the executor for some common tasks
      */
-    private ExecutorService heartbeatExecutor;
+    private ExecutorService publicExecutor;
 
     /**
      * timer for heartbeat
@@ -81,12 +79,21 @@ public class TinyClient implements IClient {
                         ChannelPipeline pipeline = ch.pipeline();
                         pipeline.addLast(new IdleStateHandler(5000, 5000, 0, TimeUnit.MILLISECONDS));
                         // auto remove the channel from the channel pool if it becomes idle
-                        pipeline.addLast(new AutoChannelRemovalHandler(pool));
+//                        pipeline.addLast(new AutoChannelRemovalHandler(pool));
                         pipeline.addLast(new TiDecoder(pool));
                         pipeline.addLast(new TiEncoder(pool));
+                        pipeline.addLast(new ClientHandler(pool));
                     }
                 });
-        heartbeatExecutor = new ScheduledThreadPoolExecutor(1);
+        this.publicExecutor = new ThreadPoolExecutor(config.getPublicExecutorCoreSize(),
+                config.getPublicExecutorCoreSize(),
+                0L,
+                TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(config.getPublicWorkerQueueSize()),
+                new TiThreadFactory("TinyClient"),
+                new ThreadPoolExecutor.CallerRunsPolicy());
+
+
         start();
     }
 
@@ -111,7 +118,7 @@ public class TinyClient implements IClient {
     }
 
     private void beatIt(final AtomicInteger retryTimes) {
-        InetSocketAddress serverAddr = new InetSocketAddress("127.0.01", 1010);
+        InetSocketAddress serverAddr = new InetSocketAddress("localhost", 1010);
         // if we fail to handshake with the server, then we remove the channel which bind with the server addr
         if (retryTimes.get() == 0) {
             log.warn("Failed to send heartbeat to the server:{}, so we have to remove the channel from the pool", Helper.identifier(serverAddr));
@@ -120,16 +127,17 @@ public class TinyClient implements IClient {
             this.canceled.compareAndSet(false, true);
             return;
         }
-        ChannelFuture cf = pool.open(new InetSocketAddress("127.0.0.1", 1010), 1000L);
+        ChannelFuture cf = pool.open(serverAddr, 1000L);
         TiCommand cmd = TiCommand.heartbeat();
-        Heartbeat hb = new Heartbeat("ping");
+        Heartbeat hb = Heartbeat.ping();
         cmd.setBody(hb.encode());
         cf.channel().writeAndFlush(cmd).addListener((Future<? super Void> future) -> {
             // if the heartbeat is failed, sleep for a while and then try again
             if (!future.isSuccess()) {
                 Thread.sleep((config.getMaxRetryTimes() - retryTimes.get()) * 1000);
                 retryTimes.getAndSet(retryTimes.decrementAndGet());
-                heartbeatExecutor.execute(() -> beatIt(retryTimes));
+                publicExecutor.execute(() -> beatIt(retryTimes));
+            }else {
             }
         });
     }
@@ -159,5 +167,32 @@ public class TinyClient implements IClient {
             }
         });
         return true;
+    }
+
+    @ChannelHandler.Sharable
+    class ClientHandler extends SimpleChannelInboundHandler<TiCommand> {
+
+        private ChannelPool pool;
+
+        public ClientHandler(ChannelPool pool) {
+            this.pool = pool;
+        }
+
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, TiCommand cmd) throws Exception {
+            final Header h = cmd.getHeader();
+            final OpType op = h.getOpType();
+            switch (op) {
+                case HEART_BEAT:
+                    final Heartbeat beat;
+                    if (h.getLength() > 0) {
+                        beat = Entity.decode(Heartbeat.class, cmd.getBody());
+                        log.info("{}", beat.getMessage());
+                    }
+                    break;
+                default:
+                    log.warn("Leave to be finished in the future");
+            }
+        }
     }
 }
