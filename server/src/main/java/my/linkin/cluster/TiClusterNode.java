@@ -92,7 +92,8 @@ public class TiClusterNode {
      * map the current node to the cluster map. If the node has been in the map, just update.
      */
     public void map(TiClusterNode peer) {
-        final String nodeId = peer.getNodeId();
+        // first map the node
+        String nodeId = peer.getNodeId();
         this.clusterMap.put(nodeId, peer);
     }
 }
