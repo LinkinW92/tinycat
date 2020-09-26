@@ -4,8 +4,10 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import my.linkin.ex.TiException;
 
+import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -60,6 +62,9 @@ public class TiClusterInfo {
      */
     private void map(TiClusterNode peer) {
         final ConcurrentMap<String, TiClusterNode> cluster = this.clusterMap;
+        if (peer.getHost().equals(this.node.getHost())) {
+            return;
+        }
         final String nodeId = peer.getNodeId();
         if (isEmpty(nodeId)) {
             throw new TiException("Unknown peer node");
@@ -100,5 +105,27 @@ public class TiClusterInfo {
 
     public void cacheChannel(String identifier, SocketChannel sc) {
         this.channels.put(identifier, sc);
+    }
+
+    /**
+     * There are some abnormal scenes should be took into account, such as:
+     * 1.A serer node start up later than others
+     * 2.A server node crash and then restart
+     * Under the above circumstances, we should do some job to make sure that our servers can connect to a later server node or re-connect to a crashed-then-restart node
+     */
+    public List<InetSocketAddress> unfinishedHandshakeServers() {
+        if (this.clusterMap.size() == ClusterConfig.CLUSTER_NODES.length - 1) {
+            return new ArrayList<>();
+        }
+        List<InetSocketAddress> pivot = Arrays.asList(ClusterConfig.CLUSTER_NODES);
+        if (this.clusterMap.size() == 0) {
+            return pivot;
+        }
+        return this.clusterMap.values()
+                .stream()
+                .filter(e -> e != null)
+                .filter(e -> !pivot.contains(e.getHost()))
+                .map(TiClusterNode::getHost).collect(Collectors.toList());
+
     }
 }

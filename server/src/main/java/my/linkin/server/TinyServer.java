@@ -26,6 +26,7 @@ import my.linkin.ex.TiException;
 import my.linkin.server.processor.CommandDispatcher;
 import my.linkin.thread.TiThreadFactory;
 import my.linkin.util.Helper;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -130,15 +131,9 @@ public class TinyServer {
         this.dispatcher.init();
 
         if (clusterModeEnable) {
-            try {
-                Thread.sleep(1000 * 10);
-            } catch (Exception e) {
-
-            }
             this.loadClusterMap();
-            // TODO check one more time
-//            this.handshakeExecutor.scheduleWithFixedDelay(this::loadClusterMap, 5, 0, TimeUnit.SECONDS);
             this.handshakeExecutor.scheduleAtFixedRate(new HandshakeTask(), 1, 15, TimeUnit.SECONDS);
+            this.handshakeExecutor.scheduleAtFixedRate(new ReconnectTask(), 5, 15, TimeUnit.SECONDS);
         }
     }
 
@@ -260,6 +255,28 @@ public class TinyServer {
                     Handshake shake = TinyServer.this.clusterInfo.createHandshakeInfo(peer.getNodeId());
                     TinyServer.this.handshakeToPeerNode(peer.getHost(), TiCommand.handshake().of(shake));
                 }
+            }
+        }
+    }
+
+    /**
+     * Re-connect task, make sure all servers exchange cluster info with each other
+     */
+    class ReconnectTask implements Runnable {
+
+        @Override
+        public void run() {
+            List<InetSocketAddress> unfinished = TinyServer.this.clusterInfo.unfinishedHandshakeServers();
+            if (CollectionUtils.isEmpty(unfinished)) {
+                return;
+            }
+            for (InetSocketAddress peer : unfinished) {
+                if (peer.equals(TinyServer.this.clusterInfo.node.getHost())) {
+                    continue;
+                }
+                log.info("Reconnect to peer node: {}", Helper.identifier(peer));
+                TiCommand cmd = TiCommand.handshake().of(Handshake.initial(TinyServer.this.clusterInfo.node));
+                handshakeToPeerNode(peer, cmd);
             }
         }
     }
