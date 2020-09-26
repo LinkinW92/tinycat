@@ -182,7 +182,7 @@ public class TinyClient implements IClient {
             final Header h = cmd.getHeader();
             final OpType op = h.getOpType();
             switch (op) {
-                case HEART_BEAT:
+                case HEARTBEAT:
                     final Heartbeat beat;
                     if (h.getLength() > 0) {
                         beat = Entity.decode(Heartbeat.class, cmd.getBody());

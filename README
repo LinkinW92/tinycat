@@ -1,7 +1,10 @@
-TinyCat is a tiny and simple project. We will complete this project step by step.
-Step1: the ping-pong between client and server.
-Step2: the ping-pong among servers.
-Step3: try to build up a cluster mode, which named tinyCluster. A cluster consist of one or more then one client, and some servers(at least 3 servers).
-       In a tinyCluster, we implement the Raft as TinyRaft to achieve HA.
-Step4: we write some data to tinyCluster. Only the master can take the write operation, the master receive the command from the client, then broadcast the
-       command to followers, if more than half of followers write successfully, then the master reply success to the client.
+TinyCat 目标：简单的Raft实现，client与server间通过ping-pong维持心跳，server与server间通过handshake交换信息。
+最终目的：
+    1.server端提供多读服务，即多个server节点支持读。
+    2.server端提供单写，即只有master节点支持写
+    3.数据同步，master与follower间数据同步，实现类似2pc的逻辑
+    4.节点选举，多个server启动时，master的选举
+    5.故障恢复，master单机或者follower宕机的恢复逻辑
+
+工作日志：
+    2020-09-24 ping-pong心跳，以及server间通过handshake实现类似Gossip的数据交换。

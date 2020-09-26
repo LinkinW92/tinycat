@@ -12,7 +12,7 @@ public enum OpType {
     /**
      * heart beat request, make sure the server and client are keep alive
      */
-    HEART_BEAT(0b01),
+    HEARTBEAT(0b01),
 
     /**
      * the handshake among servers

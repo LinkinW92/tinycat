@@ -36,7 +36,7 @@ public class Header {
 
     public static Header heartbeat() {
         Header h = new Header();
-        h.setOpType(OpType.HEART_BEAT);
+        h.setOpType(OpType.HEARTBEAT);
         return h;
     }
 

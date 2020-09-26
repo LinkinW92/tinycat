@@ -10,19 +10,20 @@ import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import my.linkin.AutoChannelRemovalHandler;
 import my.linkin.channel.ChannelPool;
 import my.linkin.cluster.ClusterConfig;
 import my.linkin.cluster.Handshake;
+import my.linkin.cluster.TiClusterInfo;
 import my.linkin.cluster.TiClusterNode;
 import my.linkin.codec.TiDecoder;
 import my.linkin.codec.TiEncoder;
 import my.linkin.entity.Entity;
-import my.linkin.entity.Heartbeat;
-import my.linkin.entity.OpType;
 import my.linkin.entity.TiCommand;
 import my.linkin.ex.TiException;
+import my.linkin.server.processor.CommandDispatcher;
 import my.linkin.thread.TiThreadFactory;
 import my.linkin.util.Helper;
 
@@ -32,17 +33,14 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-
-import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 /**
  * @author chunhui.wu
  */
 @Slf4j
+@Data
 public class TinyServer {
 
     private int port;
@@ -62,11 +60,6 @@ public class TinyServer {
     private ExecutorService publicExecutor;
 
     /**
-     * the cluster node info about current server if the cluster mode is enable
-     */
-    private TiClusterNode node;
-
-    /**
      * the scheduled executor for handshake
      */
     private ScheduledExecutorService handshakeExecutor;
@@ -77,15 +70,11 @@ public class TinyServer {
     private ServerBootstrap bootstrap;
 
     /**
-     * handshake map, we use the {@link TiClusterNode#getNodeId()} as the key
+     * If cluster mode is enable, we use clusterInfo to maintain the details about tiCluster
      */
-    private ConcurrentMap<String, TiClusterNode> clusterMap = new ConcurrentHashMap<>();
+    private TiClusterInfo clusterInfo = new TiClusterInfo();
 
-    /**
-     * the cache for channel
-     */
-    private ConcurrentMap<String, SocketChannel> channels = new ConcurrentSkipListMap<>();
-
+    private CommandDispatcher dispatcher;
 
 
     public TinyServer(int port, boolean clusterModeEnable) {
@@ -100,14 +89,12 @@ public class TinyServer {
                 new TiThreadFactory("TinyServer"),
                 new ThreadPoolExecutor.CallerRunsPolicy());
         if (clusterModeEnable) {
-            this.node = new TiClusterNode(TiClusterNode.Role.LOOKING, Helper.fakeAddr(port));
-            this.handshakeExecutor = new ScheduledThreadPoolExecutor(ClusterConfig.CLUSTER_SIZE, new ThreadFactory() {
-                @Override
-                public Thread newThread(Runnable r) {
-                    return new Thread(r, "handshake");
-                }
-            });
+            clusterInfo.node = new TiClusterNode(TiClusterNode.Role.LOOKING, Helper.fakeAddr(port));
+            this.handshakeExecutor = new ScheduledThreadPoolExecutor(ClusterConfig.CLUSTER_SIZE, (Runnable r) -> new Thread(r, "handshake"));
         }
+
+        this.dispatcher = new CommandDispatcher(this);
+
         start(clusterModeEnable);
     }
 
@@ -130,7 +117,7 @@ public class TinyServer {
                             pipeline.addLast(new AutoChannelRemovalHandler(pool));
                             pipeline.addLast(new TiDecoder(pool));
                             pipeline.addLast(new TiEncoder(pool));
-                            pipeline.addLast(new ServerHandler(pool));
+                            pipeline.addLast(new ServerHandler());
                         }
                     });
 
@@ -139,6 +126,8 @@ public class TinyServer {
             log.warn("Failed to bootstrap tiny server, ex:{}", e);
             throw new TiException("Bootstrap tiny server failed");
         }
+
+        this.dispatcher.init();
 
         if (clusterModeEnable) {
             try {
@@ -149,12 +138,12 @@ public class TinyServer {
             this.loadClusterMap();
             // TODO check one more time
 //            this.handshakeExecutor.scheduleWithFixedDelay(this::loadClusterMap, 5, 0, TimeUnit.SECONDS);
-            this.handshakeExecutor.scheduleAtFixedRate(new HandshakeTask(), 1, 5, TimeUnit.SECONDS);
+            this.handshakeExecutor.scheduleAtFixedRate(new HandshakeTask(), 1, 15, TimeUnit.SECONDS);
         }
     }
 
     /**
-     * in the bootstrap, we need to full fill the {@link TinyServer#clusterMap}
+     * in the bootstrap, we need to full fill the {@link TiClusterInfo#getClusterMap()}
      */
     private void loadClusterMap() {
         InetSocketAddress local = Helper.fakeAddr(port);
@@ -162,7 +151,7 @@ public class TinyServer {
             if (local.equals(peer)) {
                 continue;
             }
-            TiCommand cmd = TiCommand.handshake().of(Handshake.initial(this.node));
+            TiCommand cmd = TiCommand.handshake().of(Handshake.initial(this.clusterInfo.node));
             handshakeToPeerNode(peer, cmd);
         }
     }
@@ -184,96 +173,12 @@ public class TinyServer {
     }
 
     /**
-     * process the command from the client
-     */
-    private void processCommand(ChannelHandlerContext ctx, TiCommand cmd) {
-        final TiCommand tc = cmd;
-        final OpType opType = tc.getHeader().getOpType();
-        switch (opType) {
-            case HEART_BEAT:
-                if (tc.getHeader().getLength() == 0) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("No effective body found for heartbeat...");
-                    }
-                    return;
-                }
-                Heartbeat beat = Entity.decode(Heartbeat.class, tc.getBody());
-                processHeartbeat(ctx, beat);
-                break;
-            case HANDSHAKE:
-                try {
-                    if (tc.getHeader().getLength() == 0) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("No effective body found for handshake...");
-                        }
-                        return;
-                    }
-                    Handshake shake = Entity.decode(Handshake.class, tc.getBody());
-                    this.map(shake);
-                    Handshake response = this.createHandshakeInfo(null);
-                    log.info("what is the answer: {}", response);
-                    ctx.channel()
-                            .writeAndFlush(TiCommand.handshake().of(this.createHandshakeInfo(null)))
-                            .addListener((Future<? super Void> future) -> {
-                                        if (!future.isSuccess()) {
-                                            log.warn("Response to handshake command failed");
-                                        }
-                                    }
-                            );
-                } catch (Exception e) {
-                    log.warn("handshake response exception;{}, cmd:{}", e, cmd);
-                }
-
-                break;
-            case REQUEST:
-            case RESPONSE:
-                break;
-            default:
-                throw new TiException("The opType is not supported in current version");
-        }
-    }
-
-    /**
-     * process for heartbeat command, just send a "pong" to the client
-     */
-    private void processHeartbeat(ChannelHandlerContext ctx, Heartbeat beat) {
-        final SocketAddress clientAddr = ctx.channel().localAddress();
-        if (beat != null) {
-            log.info("{}", beat.getMessage());
-        } else {
-            log.info("Server receive a heartbeat from the client:{}", Helper.identifier(clientAddr));
-        }
-        TiCommand cmd = TiCommand.heartbeat();
-        Heartbeat pong = Heartbeat.pong();
-        cmd.setBody(pong.encode());
-        pong(ctx, cmd, clientAddr, new AtomicInteger(ServerConfig.maxRetryTimes));
-    }
-
-    /**
-     * send pong to client
-     */
-    private void pong(final ChannelHandlerContext ctx, final TiCommand cmd, final SocketAddress clientAddr, final AtomicInteger retryTimes) {
-        if (retryTimes.get() == 0) {
-            log.warn("Server failed to send pong to client, now we have to remove the channel the client bind");
-            pool.close(clientAddr);
-            return;
-        }
-        ctx.writeAndFlush(cmd).addListener((Future<? super Void> future) -> {
-            if (!future.isSuccess()) {
-                Thread.sleep((ServerConfig.maxRetryTimes - retryTimes.get()) * 1000);
-                retryTimes.getAndSet(retryTimes.decrementAndGet());
-                publicExecutor.execute(() -> pong(ctx, cmd, clientAddr, retryTimes));
-            }
-        });
-    }
-
-    /**
      * handshake to peer node
      */
     private void handshakeToPeerNode(InetSocketAddress peer, TiCommand cmd) {
         String identifier = Helper.identifier(peer);
 
-        SocketChannel sc = this.getCachedChannel(identifier);
+        SocketChannel sc = this.clusterInfo.getCachedChannel(identifier);
         if (sc == null) {
             sc = Helper.connect(peer, ClusterConfig.HANDSHAKE_TIMEOUT);
         }
@@ -284,7 +189,7 @@ public class TinyServer {
             }
             return;
         }
-        this.cacheChannel(identifier, sc);
+        this.clusterInfo.cacheChannel(identifier, sc);
         try {
             long beginTime = System.currentTimeMillis();
             ByteBuffer writeBuffer = cmd.encode();
@@ -320,7 +225,7 @@ public class TinyServer {
 
             if (readBuffer.hasRemaining()) {
                 TiCommand response = TiCommand.decode(readBuffer);
-                this.map(Entity.decode(Handshake.class, response.getBody()));
+                this.clusterInfo.map(Entity.decode(Handshake.class, response.getBody()));
             }
         } catch (Exception e) {
             log.warn("Failed to initial the handshake for node: {}, ex:", Helper.identifier(peer), e);
@@ -330,19 +235,9 @@ public class TinyServer {
     @ChannelHandler.Sharable
     class ServerHandler extends SimpleChannelInboundHandler<TiCommand> {
 
-        private ChannelPool pool;
-
-        public ServerHandler(ChannelPool pool) {
-            this.pool = pool;
-        }
-
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, TiCommand cmd) throws Exception {
-            try {
-                processCommand(ctx, cmd);
-            } catch (Exception e) {
-                log.warn("An error occurs when process command, ex:{}", e);
-            }
+            TinyServer.this.dispatcher.doDispatch(ctx, cmd);
         }
     }
 
@@ -354,83 +249,18 @@ public class TinyServer {
 
         @Override
         public void run() {
-            final TiClusterNode self = TinyServer.this.node.deepCopy();
-            final ConcurrentMap<String, TiClusterNode> cluster = TinyServer.this.clusterMap;
+            final ConcurrentMap<String, TiClusterNode> cluster = TinyServer.this.clusterInfo.clusterMap;
+            log.info("clusterInfo:{}", TinyServer.this.clusterInfo);
             // we don't need the cluster map info, avoid circular reference
-            log.info("node view:{}", self);
             if (cluster != null) {
                 // in current version, we handshake with all nodes that in clusterMap
                 // in future, can we just take some nodes info like the Redis Gossip?
                 List<TiClusterNode> nodes = new ArrayList<>(cluster.values());
                 for (TiClusterNode peer : nodes) {
-                    Handshake shake = TinyServer.this.createHandshakeInfo(peer.getNodeId());
+                    Handshake shake = TinyServer.this.clusterInfo.createHandshakeInfo(peer.getNodeId());
                     TinyServer.this.handshakeToPeerNode(peer.getHost(), TiCommand.handshake().of(shake));
                 }
             }
         }
-    }
-
-    /**
-     * map the current node to the cluster map. If the node has been in the map, just update.
-     */
-    private void map(TiClusterNode peer) {
-        final String nodeId = peer.getNodeId();
-        if (isEmpty(nodeId)) {
-            throw new TiException("Unknown peer node");
-        }
-        TiClusterNode exist = this.clusterMap.get(nodeId);
-        if (exist != null) {
-            exist.update(peer);
-            return;
-        }
-        peer.setLastBeatTime(System.currentTimeMillis());
-        this.clusterMap.put(nodeId, peer);
-    }
-
-    /**
-     * map the nodes exchanged from the handshake to the cluster map. If the node has been in the map, just update.
-     */
-    public void map(Handshake shake) {
-        if (shake == null) {
-            if (log.isDebugEnabled()) {
-                log.debug("Something error may happen in handshake, no shake info can be used");
-            }
-            return;
-        }
-        // the peer node info between one shake
-        TiClusterNode peer = shake.getNode();
-        map(peer);
-        // map the exchange
-        if (shake.getExchange() != null) {
-            for (Map.Entry<String, TiClusterNode> entry : shake.getExchange().entrySet()) {
-                map(entry.getValue());
-            }
-        }
-    }
-
-    public SocketChannel getCachedChannel(String identifier) {
-        return this.channels.get(identifier);
-    }
-
-    public void cacheChannel(String identifier, SocketChannel sc) {
-        this.channels.put(identifier, sc);
-    }
-
-    public Handshake createHandshakeInfo(String excludeNodeId) {
-        Handshake shake = Handshake.initial(this.node.deepCopy());
-        // in current version, we handshake with all nodes that in clusterMap
-        // in future, can we just take some nodes info like the Gossip in redis?
-        if (this.clusterMap != null) {
-            List<TiClusterNode> nodes = new ArrayList<>(this.clusterMap.values());
-            for (TiClusterNode peer : nodes) {
-                Map<String, TiClusterNode> forExchange = nodes.parallelStream()
-                        .filter(e -> e != null)
-                        .filter(e -> isEmpty(excludeNodeId) || !e.getNodeId().equals(excludeNodeId))
-                        .limit(ClusterConfig.FAN_OUT)
-                        .collect(Collectors.toMap(TiClusterNode::getNodeId, o -> o));
-                shake.setExchange(forExchange);
-            }
-        }
-        return shake;
     }
 }
