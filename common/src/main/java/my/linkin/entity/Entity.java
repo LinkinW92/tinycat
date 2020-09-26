@@ -19,6 +19,9 @@ public abstract class Entity {
     }
 
     public static <T> T decode(Class<T> clz, byte[] body) {
+        if (body == null || body.length == 0) {
+            return null;
+        }
         return JSON.parseObject(body, clz);
     }
 }

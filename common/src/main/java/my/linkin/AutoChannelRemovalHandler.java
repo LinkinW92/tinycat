@@ -24,15 +24,19 @@ public class AutoChannelRemovalHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-        if (evt instanceof IdleStateEvent) {
-            IdleStateEvent event = (IdleStateEvent) evt;
-            if (event.state() == IdleState.ALL_IDLE) {
-                ctx.channel().close();
-                log.info("This channel:{} has been timeout for read or write, now we close the channel", ctx.channel().localAddress());
-                this.pool.close(ctx.channel().localAddress());
+        try {
+            if (evt instanceof IdleStateEvent) {
+                IdleStateEvent event = (IdleStateEvent) evt;
+                if (event.state() == IdleState.ALL_IDLE) {
+                    ctx.channel().close();
+                    log.info("This channel:{} has been timeout for read or write, now we close the channel", ctx.channel().localAddress());
+                    this.pool.close(ctx.channel().localAddress());
+                }
+            } else {
+                super.userEventTriggered(ctx, evt);
             }
-        } else {
-            super.userEventTriggered(ctx, evt);
+        }catch (Exception e) {
+            log.warn("AutoChannelRemovalHandler:{}",e);
         }
     }
 

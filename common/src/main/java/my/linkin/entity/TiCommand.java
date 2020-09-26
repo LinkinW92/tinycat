@@ -2,6 +2,7 @@ package my.linkin.entity;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import my.linkin.Config;
 
 import java.nio.ByteBuffer;
 
@@ -15,6 +16,11 @@ public class TiCommand {
 
     private Header header;
     private byte[] body;
+
+    public TiCommand of(Entity entity) {
+        this.setBody(entity.encode());
+        return this;
+    }
 
 
     /**
@@ -44,8 +50,19 @@ public class TiCommand {
         return req;
     }
 
+    /**
+     * create a response
+     */
+    public static TiCommand handshake() {
+        TiCommand req = new TiCommand();
+        req.setHeader(Header.handshake());
+        return req;
+    }
+
     public static TiCommand decode(ByteBuffer buffer) {
-        ByteBuffer headerData = ByteBuffer.allocate(6);
+        ByteBuffer headerData = ByteBuffer.allocate(Config.HEADER_LENGTH);
+        headerData.put(buffer.get());
+        headerData.put(buffer.get());
         headerData.put(buffer.get());
         headerData.put(buffer.get());
         headerData.putInt(buffer.getInt());
@@ -64,8 +81,8 @@ public class TiCommand {
     public ByteBuffer encode() {
         int bodyLength = this.body == null ? 0 : this.body.length;
         this.header.setLength(bodyLength);
-        // 6 is the fixed length of header
-        ByteBuffer buffer = ByteBuffer.allocate(6 + bodyLength);
+        // 8 is the fixed length of header
+        ByteBuffer buffer = ByteBuffer.allocate(Config.HEADER_LENGTH + bodyLength);
         buffer.put(this.header.encode());
         if (this.body != null) {
             buffer.put(body);
