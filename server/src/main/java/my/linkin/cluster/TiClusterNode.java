@@ -1,16 +1,27 @@
 package my.linkin.cluster;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import my.linkin.ex.TiException;
 
 import java.net.InetSocketAddress;
+import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.stream.Collectors;
+
+import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 /**
  * @author chunhui.wu
  */
 @Data
+@Slf4j
 public class TiClusterNode {
 
     public enum Role {
@@ -73,11 +84,6 @@ public class TiClusterNode {
     private long lastBeatTime;
 
 
-    /**
-     * handshake map, we use the {@link TiClusterNode#nodeId} as the key
-     */
-    private ConcurrentMap<String, TiClusterNode> clusterMap = new ConcurrentHashMap<>();
-
     public TiClusterNode() {
     }
 
@@ -89,11 +95,30 @@ public class TiClusterNode {
 
 
     /**
-     * map the current node to the cluster map. If the node has been in the map, just update.
+     * deep copy for current node
      */
-    public void map(TiClusterNode peer) {
-        // first map the node
-        String nodeId = peer.getNodeId();
-        this.clusterMap.put(nodeId, peer);
+    public TiClusterNode deepCopy() {
+        TiClusterNode node = new TiClusterNode();
+        node.lastBeatTime = System.currentTimeMillis();
+        node.nodeId = this.nodeId;
+        node.host = this.host;
+        node.role = this.role;
+        node.state = this.state;
+        return node;
+    }
+
+
+    /**
+     * if a postponed handshake happened, we wont update the node info
+     */
+    public void update(TiClusterNode updater) {
+        if (updater.lastBeatTime < this.lastBeatTime) {
+            return;
+        }
+        this.lastBeatTime = updater.lastBeatTime;
+        this.state = State.ONLINE;
+        this.role = updater.getRole();
+        // ip may be change after last handshake
+        this.host = updater.host;
     }
 }

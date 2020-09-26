@@ -1,11 +1,13 @@
 package my.linkin.entity;
 
+import lombok.extern.slf4j.Slf4j;
 import my.linkin.ex.TiException;
 
 /**
  * @author chunhui.wu
  * the operation type occupt 1 byte in request header
  */
+@Slf4j
 public enum OpType {
     /**
      * heart beat request, make sure the server and client are keep alive

@@ -23,4 +23,9 @@ public interface Config {
      * all nodes run on the same host, distinguish by different port
      */
     String HOST = "127.0.0.1";
+
+    /**
+     * the header length of tiCommand
+     * */
+    int HEADER_LENGTH = 8;
 }

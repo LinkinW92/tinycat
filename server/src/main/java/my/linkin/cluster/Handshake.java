@@ -25,8 +25,9 @@ public class Handshake extends Entity {
     }
 
     public static Handshake initial(TiClusterNode node) {
+        final TiClusterNode tn = node.deepCopy();
         Handshake h = new Handshake();
-        h.setNode(node);
+        h.setNode(tn);
         return h;
     }
 }

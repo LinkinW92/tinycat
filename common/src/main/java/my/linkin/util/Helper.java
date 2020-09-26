@@ -52,10 +52,11 @@ public class Helper {
         }
     }
 
+
     /**
      * connect to the other node
      */
-    public static SocketChannel connect(final InetSocketAddress peer) {
+    public static SocketChannel connect(final InetSocketAddress peer, final int connectTimeout) {
         SocketChannel sc = null;
         try {
             sc = SocketChannel.open();
@@ -65,8 +66,9 @@ public class Helper {
             sc.socket().setTcpNoDelay(true);
             sc.socket().setSendBufferSize(64 * 1024);
             sc.socket().setReceiveBufferSize(64 * 1024);
-            sc.socket().connect(peer, 5 * 1000);
+            sc.socket().connect(peer, connectTimeout);
             sc.configureBlocking(false);
+            return sc;
         } catch (Exception e) {
             if (sc != null) {
                 try {

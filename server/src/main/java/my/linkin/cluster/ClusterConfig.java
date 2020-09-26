@@ -37,7 +37,7 @@ public interface ClusterConfig extends ServerConfig {
     InetSocketAddress[] CLUSTER_NODES = {
             new InetSocketAddress("127.0.0.1", 1000),
             new InetSocketAddress("127.0.0.1", 2000),
-            new InetSocketAddress("127.0.0.1", 3000)
+//            new InetSocketAddress("127.0.0.1", 3000)
     };
 
     /**
