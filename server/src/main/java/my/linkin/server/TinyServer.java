@@ -122,7 +122,7 @@ public class TinyServer {
                         }
                     });
 
-            bindWithRetrying(bootstrap, port).sync();
+            retryableBind(bootstrap, port).sync();
         } catch (Exception e) {
             log.warn("Failed to bootstrap tiny server, ex:{}", e);
             throw new TiException("Bootstrap tiny server failed");
@@ -131,7 +131,7 @@ public class TinyServer {
         this.dispatcher.init();
 
         if (clusterModeEnable) {
-            this.loadClusterMap();
+            this.loadCluster();
             this.handshakeExecutor.scheduleAtFixedRate(new HandshakeTask(), 1, 15, TimeUnit.SECONDS);
             this.handshakeExecutor.scheduleAtFixedRate(new ReconnectTask(), 5, 15, TimeUnit.SECONDS);
         }
@@ -140,7 +140,7 @@ public class TinyServer {
     /**
      * in the bootstrap, we need to full fill the {@link TiClusterInfo#getClusterMap()}
      */
-    private void loadClusterMap() {
+    private void loadCluster() {
         InetSocketAddress local = Helper.fakeAddr(port);
         for (InetSocketAddress peer : ClusterConfig.CLUSTER_NODES) {
             if (local.equals(peer)) {
@@ -151,7 +151,7 @@ public class TinyServer {
         }
     }
 
-    private ChannelFuture bindWithRetrying(final ServerBootstrap bootstrap, final int port) {
+    private ChannelFuture retryableBind(final ServerBootstrap bootstrap, final int port) {
         final AtomicInteger limit = new AtomicInteger(0);
         final SocketAddress bindAddr = new InetSocketAddress("localhost", port);
         return bootstrap.bind(bindAddr).addListener((Future<? super Void> future) -> {
@@ -160,7 +160,7 @@ public class TinyServer {
             } else {
                 if (limit.get() < maxRetryLimit) {
                     log.info("Server bind failed, try again for next port...");
-                    bindWithRetrying(bootstrap, port + 1);
+                    retryableBind(bootstrap, port + 1);
                 }
                 limit.getAndIncrement();
             }
@@ -200,8 +200,8 @@ public class TinyServer {
                 }
                 Thread.sleep(1);
             }
-            // the first byte is opType, the second byte is the length of the cmd
-            int size = writeBuffer.get(1) & 0xff;
+            // the first 32 bit is opType and requestId, the second 32bit is the length of the cmd
+            int size = writeBuffer.getInt(1);
             final ByteBuffer readBuffer = ByteBuffer.allocate(size);
             while (readBuffer.hasRemaining()) {
                 length = sc.read(readBuffer);
