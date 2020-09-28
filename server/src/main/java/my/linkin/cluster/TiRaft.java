@@ -19,7 +19,7 @@ public class TiRaft {
      * the cluster info from current server node view
      */
     private TinyServer server;
-    
+
 
     public TiRaft(TinyServer server) {
         this.server = server;

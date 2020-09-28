@@ -49,4 +49,9 @@ public interface ClusterConfig extends ServerConfig {
      * While a master election start, each node should span for a while.
      */
     int MAX_SPAN_TIMEOUT_MILLIS = 200;
+
+    /**
+     * election timeout, if no master elected in a election timeout, next election will be promoted
+     */
+    int ELECTION_TIMEOUT_MILLIS = 500;
 }
