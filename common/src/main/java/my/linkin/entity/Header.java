@@ -59,6 +59,12 @@ public class Header {
         return h;
     }
 
+    public static Header vote() {
+        Header h = new Header();
+        h.setOpType(OpType.VOTE);
+        return h;
+    }
+
     public ByteBuffer encode() {
         ByteBuffer buffer = ByteBuffer.allocate(Config.HEADER_LENGTH);
         buffer.put((byte) (opType.getIdentifier() & 0xff));

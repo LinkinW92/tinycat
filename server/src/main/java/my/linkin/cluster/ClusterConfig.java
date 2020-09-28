@@ -44,4 +44,9 @@ public interface ClusterConfig extends ServerConfig {
      * the timeout at milliseconds for the initial handshake
      */
     int HANDSHAKE_TIMEOUT = 5000;
+
+    /**
+     * While a master election start, each node should span for a while.
+     */
+    int MAX_SPAN_TIMEOUT_MILLIS = 200;
 }

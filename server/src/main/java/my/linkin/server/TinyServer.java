@@ -14,10 +14,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import my.linkin.AutoChannelRemovalHandler;
 import my.linkin.channel.ChannelPool;
-import my.linkin.cluster.ClusterConfig;
-import my.linkin.cluster.Handshake;
-import my.linkin.cluster.TiClusterInfo;
-import my.linkin.cluster.TiClusterNode;
+import my.linkin.cluster.*;
 import my.linkin.codec.TiDecoder;
 import my.linkin.codec.TiEncoder;
 import my.linkin.entity.Entity;
@@ -77,6 +74,12 @@ public class TinyServer {
 
     private CommandDispatcher dispatcher;
 
+    /**
+     * A simple implement about Raft
+     *
+     * */
+    private TiRaft raft;
+
 
     public TinyServer(int port, boolean clusterModeEnable) {
         this.port = port;
@@ -133,6 +136,7 @@ public class TinyServer {
         if (clusterModeEnable) {
             this.loadCluster();
             this.handshakeExecutor.scheduleAtFixedRate(new HandshakeTask(), 1, 15, TimeUnit.SECONDS);
+            // Handle re-connect for some abnormal circumstance
             this.handshakeExecutor.scheduleAtFixedRate(new ReconnectTask(), 5, 15, TimeUnit.SECONDS);
         }
     }
@@ -147,7 +151,7 @@ public class TinyServer {
                 continue;
             }
             TiCommand cmd = TiCommand.handshake().of(Handshake.initial(this.clusterInfo.node));
-            handshakeToPeerNode(peer, cmd);
+            sendCommand(peer, cmd);
         }
     }
 
@@ -168,9 +172,9 @@ public class TinyServer {
     }
 
     /**
-     * handshake to peer node
+     * send command to peer node
      */
-    private void handshakeToPeerNode(InetSocketAddress peer, TiCommand cmd) {
+    public void sendCommand(InetSocketAddress peer, TiCommand cmd) {
         String identifier = Helper.identifier(peer);
 
         SocketChannel sc = this.clusterInfo.getCachedChannel(identifier);
@@ -246,14 +250,13 @@ public class TinyServer {
         public void run() {
             final ConcurrentMap<String, TiClusterNode> cluster = TinyServer.this.clusterInfo.clusterMap;
             log.info("clusterInfo:{}", TinyServer.this.clusterInfo);
-            // we don't need the cluster map info, avoid circular reference
             if (cluster != null) {
-                // in current version, we handshake with all nodes that in clusterMap
-                // in future, can we just take some nodes info like the Redis Gossip?
+                // In current version, we handshake with all clusterMap nodes.
+                // In future, can we just take some nodes info like the Redis Gossip?
                 List<TiClusterNode> nodes = new ArrayList<>(cluster.values());
                 for (TiClusterNode peer : nodes) {
                     Handshake shake = TinyServer.this.clusterInfo.createHandshakeInfo(peer.getNodeId());
-                    TinyServer.this.handshakeToPeerNode(peer.getHost(), TiCommand.handshake().of(shake));
+                    TinyServer.this.sendCommand(peer.getHost(), TiCommand.handshake().of(shake));
                 }
             }
         }
@@ -276,7 +279,7 @@ public class TinyServer {
                 }
                 log.info("Reconnect to peer node: {}", Helper.identifier(peer));
                 TiCommand cmd = TiCommand.handshake().of(Handshake.initial(TinyServer.this.clusterInfo.node));
-                handshakeToPeerNode(peer, cmd);
+                sendCommand(peer, cmd);
             }
         }
     }

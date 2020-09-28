@@ -42,6 +42,15 @@ public class TiCommand {
     }
 
     /**
+     * create a vote
+     */
+    public static TiCommand vote() {
+        TiCommand req = new TiCommand();
+        req.setHeader(Header.vote());
+        return req;
+    }
+
+    /**
      * create a response
      */
     public static TiCommand response() {

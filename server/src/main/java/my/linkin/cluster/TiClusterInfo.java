@@ -24,6 +24,12 @@ import static org.apache.commons.lang3.StringUtils.isEmpty;
 @Slf4j
 @Data
 public class TiClusterInfo {
+
+    /**
+     * the cluster master node, maybe equals to the {@link TiClusterInfo#node}
+     */
+    public TiClusterNode master;
+
     /**
      * the cluster node info about current server if the cluster mode is enable
      */
@@ -42,8 +48,6 @@ public class TiClusterInfo {
         final ConcurrentMap<String, TiClusterNode> cluster = this.clusterMap;
         final TiClusterNode node = this.node;
         Handshake shake = Handshake.initial(node.deepCopy());
-        // in current version, we handshake with all nodes that in clusterMap
-        // in future, can we just take some nodes info like the Gossip in redis?
         if (cluster != null) {
             List<TiClusterNode> nodes = new ArrayList<>(cluster.values());
             Map<String, TiClusterNode> forExchange = nodes.parallelStream()

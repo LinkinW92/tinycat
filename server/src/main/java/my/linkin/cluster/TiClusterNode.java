@@ -2,17 +2,9 @@ package my.linkin.cluster;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import my.linkin.ex.TiException;
 
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
-
-import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 /**
  * @author chunhui.wu

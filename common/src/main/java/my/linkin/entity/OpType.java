@@ -25,7 +25,11 @@ public enum OpType {
     /**
      * response type, just response to a request
      */
-    RESPONSE(0b100);
+    RESPONSE(0b100),
+    /**
+     * vote for a candidate
+     */
+    VOTE(0b101);
 
     private Integer identifier;
 

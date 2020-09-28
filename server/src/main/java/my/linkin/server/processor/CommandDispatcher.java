@@ -49,7 +49,8 @@ public class CommandDispatcher {
     public void init() {
         this.processorFactory.putIfAbsent(OpType.HANDSHAKE, new HandshakeProcessor(server));
         this.processorFactory.putIfAbsent(OpType.HEARTBEAT, new HeartbeatProcessor(server));
-        this.processorFactory.putIfAbsent(OpType.REQUEST, new ResponseProcessor(server));
+        this.processorFactory.putIfAbsent(OpType.REQUEST, new RequestProcessor(server));
         this.processorFactory.putIfAbsent(OpType.RESPONSE, new ResponseProcessor(server));
+        this.processorFactory.putIfAbsent(OpType.VOTE, new VoteProcessor(server));
     }
 }
