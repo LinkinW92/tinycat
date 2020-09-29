@@ -1,8 +1,5 @@
 package my.linkin.algorithm;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Stack;
 
 /**
@@ -65,6 +62,6 @@ public class TreeDepth {
 //        System.out.println(depthV1(n1));
 
         MaxCommonPathDepth commonPathDepth = new MaxCommonPathDepth();
-        System.out.println(commonPathDepth.commonPath(n1, n2, n7));
+        System.out.println(commonPathDepth.lowestCommonAncestor(n1, n2, n7));
     }
 }

@@ -7,11 +7,11 @@ import lombok.Data;
  */
 @Data
 public class TreeNode {
-    public int v;
+    public int val;
     public TreeNode left;
     public TreeNode right;
 
     public TreeNode(int v) {
-        this.v = v;
+        this.val = v;
     }
 }

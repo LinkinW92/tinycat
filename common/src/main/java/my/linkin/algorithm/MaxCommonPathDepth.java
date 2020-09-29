@@ -10,40 +10,39 @@ import java.util.List;
 public class MaxCommonPathDepth {
 
 
-    public int commonPath(TreeNode root, TreeNode n1, TreeNode n2) {
+    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {
+        if (null != ifSonNode(p, q)) {
+            return p;
+        }
+        if (null != ifSonNode(q, p)) {
+            return q;
+        }
         List<TreeNode> path1 = new ArrayList<>(), path2 = new ArrayList<>();
-        path1.add(root);
-        path2.add(root);
-        pathTo(root, n1, new ArrayDeque(), path1);
-        pathTo(root, n2, new ArrayDeque(), path2);
-        TreeNode commonNode = null;
+        pathTo(root, p, new ArrayDeque(), path1);
+        pathTo(root, q, new ArrayDeque(), path2);
+        TreeNode commonNode = root;
         int idx1 = 0, idx2 = 0;
         while (idx1 < path1.size() && idx2 < path2.size()) {
-            if (path1.get(idx1).v == path2.get(idx2).v) {
+            if (path1.get(idx1).val == path2.get(idx2).val) {
                 commonNode = path1.get(idx1);
-            }
-            idx1++;
-            idx2++;
-        }
-        if (idx1 < path1.size()) {
-            List<TreeNode> li = new ArrayList<>();
-            pathTo(n2, n1, new ArrayDeque<>(), li);
-            for (TreeNode n : li) {
-                if (n.v == n1.v) {
-                    commonNode = n2;
-                }
+                idx1++;
+                idx2++;
+            } else {
+                break;
             }
         }
-        if (idx2 < path2.size()) {
-            List<TreeNode> li = new ArrayList<>();
-            pathTo(n1, n2, new ArrayDeque<>(), li);
-            for (TreeNode n : li) {
-                if (n.v == n2.v) {
-                    commonNode = n1;
-                }
+        return commonNode;
+    }
+
+    private TreeNode ifSonNode(TreeNode rooter, TreeNode matcher) {
+        List<TreeNode> li = new ArrayList<>();
+        pathTo(rooter, matcher, new ArrayDeque<>(), li);
+        for (TreeNode n : li) {
+            if (n.val == matcher.val) {
+                return rooter;
             }
         }
-        return commonNode.v;
+        return null;
     }
 
     public void pathTo(TreeNode root, TreeNode n, ArrayDeque deque, List<TreeNode> path) {
@@ -52,7 +51,7 @@ public class MaxCommonPathDepth {
         }
         if (root.left != null) {
             deque.addLast(root.left);
-            if (root.left.v == n.v) {
+            if (root.left.val == n.val) {
                 path.addAll(deque);
                 return;
             }
@@ -61,7 +60,7 @@ public class MaxCommonPathDepth {
         }
         if (root.right != null) {
             deque.addLast(root.right);
-            if (root.right.v == n.v) {
+            if (root.right.val == n.val) {
                 path.addAll(deque);
                 return;
             }
