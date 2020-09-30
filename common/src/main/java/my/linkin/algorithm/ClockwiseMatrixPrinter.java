@@ -11,47 +11,61 @@ public class ClockwiseMatrixPrinter {
         if (a.length == 0) {
             return new int[0];
         }
-        int len = a.length * a[0].length;
-        int[] r = new int[len];
-        final int MAX_X = a.length, MAX_Y = a[0].length;
-        int ymin = 0, ymax = MAX_Y - 1, xmin = 0, xmax = MAX_X - 1, idx = 0;
-        while (xmin < xmax && ymin < ymax) {
-            for (int i = ymin; i <= ymax; i++) {
-                sout(a[xmin][i]);
-                r[idx++] = (a[xmin][i]);
-            }
-            for (int j = xmin + 1; j <= xmax; j++) {
-                sout(a[j][ymax]);
-                r[idx++] = (a[j][ymax]);
-            }
-            for (int m = ymax - 1; m >= 0; m--) {
-                sout(a[xmax][m]);
-                r[idx++] = (a[xmax][m]);
-            }
-            for (int n = xmax - 1; n > xmin; n--) {
-                sout(a[n][ymin]);
-                r[idx++] = (a[n][ymin]);
-            }
-            xmin++;
-            ymin++;
-            xmax--;
-            ymax--;
+        final int R = a.length, C = a[0].length;
+        int idx = 0, start = 0;
+        int[] result = new int[R * C];
+        while (idx <= R - idx && idx <= C - idx) {
+            printCircle(a, idx, result, start);
+            start = (R - idx * 2) * 2 + (C - idx * 2) * 2 - 4;
+            idx++;
         }
-        while (idx < len && xmin <= xmax) {
-            r[idx++] = (a[xmin++][ymin]);
-        }
-        while (idx < len && ymin <= ymax) {
-            r[idx++] = (a[xmin][ymin++]);
-        }
-        return r;
+        return result;
     }
 
-    public static void sout(int a) {
+
+    /**
+     * @param a      原二位矩阵
+     * @param idx    当前打印的是第几圈的，起始为0
+     * @param result
+     */
+    private static void printCircle(int[][] a, int idx, int[] result, int start) {
+        final int R = a.length - 1, C = a[0].length - 1;
+        // 横向打印，从左至右
+        for (int m = idx; m <= C - idx; m++) {
+            print(a[idx][m]);
+            result[start++] = a[idx][m];
+        }
+        if (idx + 1 > R) {
+            return;
+        }
+        for (int m = idx + 1; m <= R - idx; m++) {
+            print(a[m][C - idx]);
+            result[start++] = a[m][C - idx];
+        }
+
+        if (C - idx - 1 < idx) {
+            return;
+        }
+        for (int m = C - idx - 1; m >= idx; m--) {
+            print(a[R - idx][m]);
+            result[start++] = a[R - idx][m];
+        }
+        if (R - idx - 1 < idx + 1) {
+            return;
+        }
+        for (int m = R - idx - 1; m >= idx + 1; m--) {
+            print(a[m][idx]);
+            result[start++] = a[m][idx];
+        }
+    }
+
+    public static void print(int a) {
         System.out.print(a + " ");
     }
 
     public static void main(String[] args) {
-        int[][] a = new int[][]{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+        // {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}
+        int[][] a = new int[][]{{1, 2, 3, 4, 5, 6, 7, 8}, {11, 22, 33, 44, 55, 66, 77, 88}};
         int[] r = new ClockwiseMatrixPrinter().spiralOrder(a);
 //        for (int i : r) {
 //            System.out.print(i + " ");
