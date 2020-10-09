@@ -24,7 +24,7 @@ public class ClockwiseMatrixPrinter {
 
 
     /**
-     * @param a      原二位矩阵
+     * @param a      原二维矩阵
      * @param idx    当前打印的是第几圈的，起始为0
      * @param result
      */
