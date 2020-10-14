@@ -39,16 +39,17 @@ public class MergeSpace {
         for (Integer[] a : r) {
             res[i][0] = a[0];
             res[i][1] = a[1];
-            System.out.println(res[i][0] + "," + res[i][1]);
+            System.out.println(a[0] + ", " + a[1]);
             i++;
         }
         return res;
     }
 
     public static void main(String[] args) {
+        int[][] a = {{1, 4}, {0, 1}};
 //        int[][] a = {{1, 3}, {2, 6}, {8, 10}, {15, 18}};
 //        int[][] a = {{1, 4}, {4, 5}};
-        int[][] a = {{1, 4}, {0, 0}, {2, 5}, {4, 10}, {3, 8}, {-1, 0}};
+//        int[][] a = {{1, 4}, {0, 0}, {2, 5}, {4, 10}, {3, 8}, {-1, 0}};
         MergeSpace ms = new MergeSpace();
         ms.merge(a);
     }
