@@ -1,6 +1,6 @@
 package my.linkin.algorithm;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.commons.lang3.time.StopWatch;
 
 /**
  * @author chunhui.wu
@@ -8,27 +8,28 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class UniquePath {
     public int uniquePaths(int m, int n) {
-        AtomicInteger counter = new AtomicInteger(0);
-        dispatch(1, 1, n, m, counter);
-        return counter.get();
+        int max = m > n ? m : n, min = m > n ? n : m;
+        return subPath(min, max);
     }
 
-    public void dispatch(int sx, int sy, final int r, final int c, AtomicInteger counter) {
-        if (sx == r && sy == c) {
-            counter.incrementAndGet();
-            return;
+    public int subPath(int min, int max) {
+        if (min == 1 || max == 1) {
+            return 1;
         }
-        if (sx < r) {
-            dispatch(sx + 1, sy, r, c, counter);
+        int i = 0, counter = 0;
+        while (i++ < max) {
+            counter += (subPath(min - 1, max - i));
         }
-        if (sy < c) {
-            dispatch(sx, sy + 1, r, c, counter);
-        }
+        return counter;
     }
 
     public static void main(String[] args) {
         UniquePath up = new UniquePath();
-        System.out.println(up.uniquePaths(23, 12));
+        StopWatch watch = new StopWatch();
+        watch.start();
+        System.out.println(up.uniquePaths(7, 3));
+        watch.stop();
+        System.out.println(watch.getNanoTime() / 1000 / 1000 / 1000);
     }
 
 
